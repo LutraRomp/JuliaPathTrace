@@ -14,7 +14,6 @@ type ShaderRGBA{T<:AbstractFloat}
 end
 
 ShaderRGBA{T<:AbstractFloat}(r::T,g::T,b::T) = ShaderRGBA{T}(r,g,b,1.0)
-ShaderRGBA{T<:AbstractFloat}(r::T,g::T,b::T,a::T) = ShaderRGBA{T}(r,g,b,a)
 ShaderRGBA() = ShaderRGBA(0.0, 0.0, 0.0, 1.0)
 
 

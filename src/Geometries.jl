@@ -1,4 +1,4 @@
-module Geomitries
+module Geometries
 
 export Sphere
 
@@ -11,5 +11,7 @@ type Sphere{T}
 
     Material::Shader{T}
 end
+
+Sphere() = Sphere(Array(Float64, 3), convert(Float64,0.0), convert(Float64,0.0), Shader())
 
 end

@@ -1,131 +1,118 @@
 module RayTrace
 
-export Sphere,SHADER,diffuse,glossy,refraction,Trace
+export Camera, get_ray, trace_path
 
-
-# Shader related code
-@enum SHADER diffuse=1 glossy=2 refraction=3
-
-Mix(a,b,mix) = b*mix + a*(1.0-mix)
-
-type Shader{T}
-    ShaderType::SHADER
-    ShaderValue::Array{T}
-end
-
-# Ray path related code
-CalcRefl(RayDir, Normal) = normalize( RayDir - 2 * Normal * dot(RayDir,Normal) )
-
-function CalcDiffuse(RayDir, Normal)
-    Theta = 2*pi*rand()
-    z = rand()
-    sz2 = sqrt(1-z*z)
-    x = sz2*cos(Theta)
-    y = sz2*sin(Theta)
-
-    w=normalize(cross([0.0, 0.0, 1.0], Normal))
-
-    w_hat=[0 -w[3] w[2]; w[3] 0 -w[1]; -w[2] w[1] 0]
-
-    cos_tht=normalize([0.0, 0.0, 1.0])'*normalize(Normal)
-    tht=acos(cos_tht[1])
-
-    R=eye(3)+w_hat*sin(tht)+w_hat^2*(1-cos(tht))
-
-    return R*[x,y,z]
-end
-
-function CalcRefr(RayDir, normal, n1, n2)
-    eta = n1/n2
-    c1 = -dot(RayDir, normal)
-    cs2 = 1.0 - eta*eta*(1.0-c1*c1)
-    if cs2 < 0.0
-        return zeros(3)
-    end
-    return normalize( eta*RayDir + (eta*c1-sqrt(cs2))*normal )
-end
+using MatrixTools, JuliaShader, Geometries
 
 # Object related code
-type Camera{T}
+type Camera{T,U}
     origin::Array{T}
-    lookdir::Array{T}
-    updir::Array{T}
+    rotation::Array{T}
+
+    focal_length::T
+    fov::T
+    ppu::T
+
+    res_x::U
+    res_y::U
 end
 
-type Sphere{T}
-    center::Array{T}
-    radius::T
-    radius2::T
-    Material::Shader{T}
+function Camera()
+    origin = zeros(3)
+    rotation = zeros(3)
 
-    function Sphere()
-        center=zeros(T,3)
-        radius=1.0
-        radius2=1.0
-        Material=Shader(diffuse, ones(T,3))
-        new(center,radius,radius2,Material)
-    end
+    res_x = 1920
+    res_y = 1080
+
+    focal_length = 10.0
+    fov = deg2rad(30.0)
+    ppu = CalcPPU(res_x, res_y, focal_length, fov)
+
+    Camera(origin, rotation, focal_length, fov, ppu, res_x, res_y)
 end
 
-function Intersect(RayOrig, RayDir, sphere::Sphere)
-    l = sphere.center - RayOrig
-    tca = dot(l, RayDir)
-    if tca < 0
-        return (false, 0.0)
-    end
+function Camera{T<:Integer}(res_x::T, res_y::T)
+    origin = zeros(3)
+    rotation = zeros(3)
 
-    d2 = dot(l, l) - (tca * tca)
-    if d2 > sphere.radius2
-        return (false, 0.0)
-    end
+    focal_length = 10.0
+    fov = deg2rad(30.0)
+    ppu = CalcPPU(res_x, res_y, focal_length, fov)
 
-    thc = sqrt(sphere.radius2 - d2)
-    t0 = tca - thc
-    t1 = tca + thc
-    if t0 < 0
-        t0 = t1
-    end
-    return (true, t0)
-end 
-
-function CalcNormal(RayOrig, RayDir, sphere::Sphere, t0)
-    phit=RayOrig+RayDir*t0
-    nhit=normalize(phit - sphere.center)
-    return (phit, nhit)
+    Camera(origin, rotation, focal_length, fov, ppu, res_x, res_y)
 end
 
-function Trace(WorldObjects, RayOrig, RayDir, depth)
+function CalcPPU{T<:Integer, U<:AbstractFloat}(res_x::T, res_y::T, focal_length::U, fov::U)
+    f_x = convert(Float64, res_x)
+    f_y = convert(Float64, res_y)
+
+    opposite_half = sqrt(f_x^2 + f_y^2)/2.0
+    opposite_size = focal_length * tan(fov/2.0)
+
+    return opposite_size / opposite_half
+end
+
+
+function get_ray(camera::Camera, i, j)
+    p_x = convert(Float64, i - camera.res_x/2) * camera.ppu
+    p_y = convert(Float64, j - camera.res_y/2) * camera.ppu
+
+    #t_m = translate(camera.origin[1], camera.origin[2], camera.origin[3])
+    t_m = eye(4)
+
+    t_m *= rotate_x(camera.rotation[1])
+    t_m *= rotate_y(camera.rotation[2])
+    t_m *= rotate_z(camera.rotation[3])
+
+    ray_dir = t_m * [p_x, p_y, camera.focal_length, 1.0]
+    return normalize(ray_dir[1:3])
+end
+
+
+function trace_path(world_objects, ray_orig, ray_dir, depth)
     if depth == 0
-        return 0.0
+        return ShaderRGBA(0.0, 0.0, 0.0)
     end
 
-    SelectedItem=0
-    ClosestDist=1e100
-    for i in 1:length(WorldObjects)
-        hit,dist=Intersect(RayOrig, RayDir, WorldObjects[i])
+    selected_item=0
+    closest_dist=1e100
+    for i in 1:length(world_objects)
+        hit,dist=obj_intersect(world_objects[i], ray_orig, ray_dir)
         if hit
-            if dist < ClosestDist
-                SelectedItem=i
-                ClosestDist=dist
+            if dist < closest_dist
+                selected_item=i
+                closest_dist=dist
             end
         end
     end
 
-    if SelectedItem == 0
-        return collect([1.0, 1.0, 1.0])     # Ambient Light.  Hard Coded for now
+    # If no object is seen, return ambient light conditions (hard coded for now.)
+    if selected_item == 0
+      return ShaderRGBA(1.0, 1.0, 1.0)
     end
 
-    PointHit, NormalOfHit = CalcNormal(RayOrig, RayDir, WorldObjects[SelectedItem], ClosestDist)
 
-    if WorldObjects[SelectedItem].Material.ShaderType == glossy
-        NewRayDir = CalcRefl(RayDir, NormalOfHit)
-        Multiplier = 1.0
-    else
-        NewRayDir = CalcDiffuse(RayDir, NormalOfHit)
-        Multiplier = WorldObjects[SelectedItem].Material.ShaderValue*max(0.0,dot(NormalOfHit,NewRayDir))
-    end
+    # Shader Work
+    point_hit, normal_of_hit = calc_intersection(world_objects[selected_item], ray_orig, ray_dir, closest_dist)
 
-    return Multiplier*Trace(WorldObjects, PointHit, NewRayDir, depth-1)
+    new_diffuse_ray_dir = calc_diff(ray_dir, normal_of_hit)
+    new_glossy_ray_dir = calc_refl(ray_dir, normal_of_hit)
+    # Integrate 'multiplier' into new color method of doing things
+    # Multiplier = world_objects[selected_item].Material.ShaderValue*max(0.0,dot(normal_of_hit, new_ray_dir))
+
+    ret_diffuse_color = trace_path(world_objects, point_hit, new_diffuse_ray_dir, depth-1)
+    ret_glossy_color = trace_path(world_objects, point_hit, new_glossy_ray_dir, depth-1)
+
+    diffuse_color  = world_objects[selected_item].material.diffuse * max(0.0, dot(normal_of_hit, new_diffuse_ray_dir))
+    diffuse_color  = diffuse_color * ret_diffuse_color
+    glossy_color   = world_objects[selected_item].material.glossy * ret_glossy_color
+    emission_color = world_objects[selected_item].material.emission
+
+    glossy_mix   = world_objects[selected_item].material.glossy_mix
+    emission_mix = world_objects[selected_item].material.emission_mix
+
+    # return Multiplier.*trace(world_objects, point_hit, new_ray_dir, depth-1)
+    return mix(emission_mix, mix(glossy_mix, diffuse_color, glossy_color), emission_color)
 end
 
 end

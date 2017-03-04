@@ -2,7 +2,10 @@
 
 @everywhere push!(LOAD_PATH, ".")
 using Images
-using RayTrace
+
+using ArrayEnv
+using JuliaShader
+
 
 function GenObjects()
     WorldObjects=[]

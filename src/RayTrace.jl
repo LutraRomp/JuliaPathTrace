@@ -53,9 +53,14 @@ function CalcPPU{T<:Integer, U<:AbstractFloat}(res_x::T, res_y::T, focal_length:
 end
 
 
-function get_ray(camera::Camera, i, j)
+function get_ray(camera::Camera, i, j, jitter=false)
     p_x = convert(Float64, i - camera.res_x/2) * camera.ppu
     p_y = convert(Float64, j - camera.res_y/2) * camera.ppu
+
+    if jitter
+        p_x += 0.8*(rand()-0.5)*camera.ppu
+        p_y += 0.8*(rand()-0.5)*camera.ppu
+    end
 
     #t_m = translate(camera.origin[1], camera.origin[2], camera.origin[3])
     t_m = eye(4)

@@ -2,6 +2,8 @@
 push!(LOAD_PATH, "./")
 
 using DataFrames
+using Images
+using FileIO
 
 using JuliaShader
 using Geometries
@@ -11,7 +13,7 @@ using RayTrace
 using MatrixTools
 
 function GenObjects()
-    oa = ObjectArray(50)
+    oa = ObjectArray(30)
     for i in 1:length(oa)
         oa[i] = Sphere()
         oa[i].center  = 9.0*(rand(3)-0.5)
@@ -25,6 +27,19 @@ function GenObjects()
         else
             oa[i].material.glossy_mix =0.0
         end
+
+        if i % 7 == 0
+            oa[i].material.diffuse.r = 0.0
+            oa[i].material.diffuse.g = 0.0
+        end
+        if i % 9 == 0
+            oa[i].material.diffuse.g = 0.0
+            oa[i].material.diffuse.b = 0.0
+        end
+        if i % 10 == 0
+            oa[i].material.diffuse.b = 0.0
+            oa[i].material.diffuse.r = 0.0
+        end
     end
     return oa
 end
@@ -34,14 +49,15 @@ function GenAccelStructure(oa)
 end
 
 function render(camera::Camera, aa)
-    println("i,j,r,g,b,a")
+    img = Array(Float32, 3, camera.res_x, camera.res_y)
     for i in 1:camera.res_x
+        println("Row: $(i)")
         for j in 1:camera.res_y
             r = 0.0
             g = 0.0
             b = 0.0
             a = 0.0
-            for itter = 1:5
+            for itter = 1:10
                 ray_dir = get_ray(camera, i, j)
                 x = trace_path(aa, camera.origin, ray_dir, 10)
                 r += x.r
@@ -49,25 +65,24 @@ function render(camera::Camera, aa)
                 b += x.b
                 a += x.a
             end
-            #df = vcat(df, DataFrame(i=i, j=j, r=r/10.0, g=g/10.0, b=b/10.0, a=a/10.0))
-            r=r/5.0
-            g=g/5.0
-            b=b/5.0
-            a=a/5.0
-            println("$i,$j,$r,$g,$b,$a")
+            img[1,j,i]=r/10.0
+            img[2,j,i]=g/10.0
+            img[3,j,i]=b/10.0
         end
     end
+    return img
 end
 
 function go()
-    camera = Camera(120, 120)
+    camera = Camera(400, 400)
     camera.origin = [0.0, 0.0, -40.0]
     camera.rotation = [0.0, 0.0, 0.0]
 
     oa = GenObjects()
     aa = GenAccelStructure(oa)
 
-    @time render(camera, aa)
+    @time img=render(camera, aa)
+    save("out.png", colorview(RGB, img))
 end
 
 

@@ -63,7 +63,10 @@ function get_ray(camera::Camera, i, j, jitter=false)
     end
 
     #t_m = translate(camera.origin[1], camera.origin[2], camera.origin[3])
-    t_m = eye(4)
+    t_m = [1.0  0.0  0.0  0.0;
+           0.0  1.0  0.0  0.0;
+           0.0  0.0  1.0  0.0;
+           0.0  0.0  0.0  1.0]
 
     t_m *= rotate_x(camera.rotation[1])
     t_m *= rotate_y(camera.rotation[2])
@@ -96,28 +99,34 @@ function trace_path(world_objects, ray_orig, ray_dir, depth)
       return ShaderRGBA(1.0, 1.0, 1.0)
     end
 
+    ret_color = ShaderRGBA(0.0, 0.0, 0.0)
 
     # Shader Work
     point_hit, normal_of_hit = calc_intersection(world_objects[selected_item], ray_orig, ray_dir, closest_dist)
 
-    new_diffuse_ray_dir = calc_diff(ray_dir, normal_of_hit)
-    new_glossy_ray_dir = calc_refl(ray_dir, normal_of_hit)
-    # Integrate 'multiplier' into new color method of doing things
-    # Multiplier = world_objects[selected_item].Material.ShaderValue*max(0.0,dot(normal_of_hit, new_ray_dir))
-
-    ret_diffuse_color = trace_path(world_objects, point_hit, new_diffuse_ray_dir, depth-1)
-    ret_glossy_color = trace_path(world_objects, point_hit, new_glossy_ray_dir, depth-1)
-
-    diffuse_color  = world_objects[selected_item].material.diffuse * max(0.0, dot(normal_of_hit, new_diffuse_ray_dir))
-    diffuse_color  = diffuse_color * ret_diffuse_color
-    glossy_color   = world_objects[selected_item].material.glossy * ret_glossy_color
-    emission_color = world_objects[selected_item].material.emission
-
     glossy_mix   = world_objects[selected_item].material.glossy_mix
     emission_mix = world_objects[selected_item].material.emission_mix
+    if glossy_mix < 0.9999
+        new_diffuse_ray_dir = calc_diff(ray_dir, normal_of_hit)
+        ret_diffuse_color = trace_path(world_objects, point_hit, new_diffuse_ray_dir, depth-1)
+        diffuse_color  = world_objects[selected_item].material.diffuse * max(0.0, dot(normal_of_hit, new_diffuse_ray_dir))
+        diffuse_color  = diffuse_color * ret_diffuse_color
+        ret_color = (1.0-glossy_mix) * diffuse_color
+    end
 
-    # return Multiplier.*trace(world_objects, point_hit, new_ray_dir, depth-1)
-    return mix(emission_mix, mix(glossy_mix, diffuse_color, glossy_color), emission_color)
+    if glossy_mix > 0.0001
+        new_glossy_ray_dir = calc_refl(ray_dir, normal_of_hit)
+        ret_glossy_color = trace_path(world_objects, point_hit, new_glossy_ray_dir, depth-1)
+        glossy_color   = world_objects[selected_item].material.glossy * ret_glossy_color
+        ret_color = ret_color + glossy_mix*glossy_color
+    end
+
+    if emission_mix > 0.0001
+        emission_color = world_objects[selected_item].material.emission
+        return mix(emission_mix, ret_color, emission_color)
+    end
+
+    return ret_color
 end
 
 end

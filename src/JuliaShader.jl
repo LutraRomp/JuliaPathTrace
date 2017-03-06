@@ -20,7 +20,7 @@ ShaderRGBA() = ShaderRGBA(0.0, 0.0, 0.0, 1.0)
 *(x::ShaderRGBA, y::ShaderRGBA) =
         ShaderRGBA(x.r*y.r, x.g*y.g, x.b*y.b, x.a*y.a)
 *{T<:AbstractFloat}(x::ShaderRGBA, y::T) = ShaderRGBA(x.r*y, x.g*y, x.b*y, x.a*y)
-*{T<:AbstractFloat}(x::AbstractFloat, y::T) = y*x
+*{T<:AbstractFloat}(x::T, y::ShaderRGBA) = y*x
 /(x::ShaderRGBA, y::ShaderRGBA) =
         ShaderRGBA(x.r/y.r, x.g/y.g, x.b/y.b, x.a/y.a)
 /{T<:AbstractFloat}(x::ShaderRGBA, y::T) = ShaderRGBA(x.r/y, x.g/y, x.b/y, x.a/y)

@@ -29,14 +29,17 @@ mix{T<:AbstractFloat, U<:ShaderRGBA}(mix::T,a::U,b::U) = b*mix + a*(1.0-mix)
 
 type Shader{T<:AbstractFloat}
     diffuse::ShaderRGBA{T}
+    diffuse_set::Bool
     glossy::ShaderRGBA{T}
+    glossy_set::Bool
     glossy_mix::T
 
     emission::ShaderRGBA{T}
+    emission_set::Bool
     emission_mix::T
 end
 
-Shader() = Shader(ShaderRGBA(), ShaderRGBA(), 0.0, ShaderRGBA(), 0.0)
+Shader() = Shader(ShaderRGBA(), true, ShaderRGBA(), false, 0.0, ShaderRGBA(), false, 0.0)
 
 
 # Ray path related code

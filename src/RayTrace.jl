@@ -58,8 +58,8 @@ function get_ray(camera::Camera, i, j, jitter=false)
     p_y = convert(Float64, j - camera.res_y/2) * camera.ppu
 
     if jitter
-        p_x += 0.8*(rand()-0.5)*camera.ppu
-        p_y += 0.8*(rand()-0.5)*camera.ppu
+        p_x += 0.2*randn()*camera.ppu
+        p_y += 0.2*randn()*camera.ppu
     end
 
     # Would be a bit clearer to include this code, but

@@ -16,6 +16,9 @@ type AccelGrid{T}
     xmin::Float64, xmax::Float64
     ymin::Float64, ymax::Float64
     zmin::Float64, zmax::Float64
+    dx::Float64
+    dy::Float64
+    dz::Float64
 end
 
 Base.start(::AccelGrid) = 1
@@ -42,6 +45,7 @@ function GenerateStructure(OA::ObjectArray, nx, ny, nz)
     local xmin::Float64, xmax::Float64
     local ymin::Float64, ymax::Float64
     local zmin::Float64, zmax::Float64
+    local dx::Float64, dy::Float64, dz::Float64
     local x::Float64, y::Float64, z::Float64
 
     xmin,ymin,zmin = OA[1].center - OA[1].radius
@@ -60,12 +64,21 @@ function GenerateStructure(OA::ObjectArray, nx, ny, nz)
         end
     end
 
-    for o in 1:count
-        xmn,ymn,zmn = o.center - o.radius
-        xmx,ymx,zmx = o.center + o.radius
-        # TODO: Add selected sphere to accel structure
+    for s in 1:count
+        o = OA[s]
+        xmn,ymn,zmn = floor(Int32, o.center - o.radius - xmin)
+        xmx,ymx,zmx = ceil(Int32, o.center + o.radius - xmin)
+
+        for i in xmn:xmx
+            for j in ymn:ymx
+                for k in zmn:zmx
+                    push!(a[i,j,k], s)
+                end
+            end
+        end
+        
     end
-    AccelGrid(n, a, OA)
+    AccelGrid(count, a, OA, xmin, xmax, ymin, ymax, zmin, zmax, dx, dy, dz)
 end
 
 end

@@ -13,9 +13,12 @@ type AccelGrid{T}
     a::Array{Array{T,1},3}
     oa::ObjectArray
 
-    xmin::Float64, xmax::Float64
-    ymin::Float64, ymax::Float64
-    zmin::Float64, zmax::Float64
+    xmin::Float64
+    xmax::Float64
+    ymin::Float64
+    ymax::Float64
+    zmin::Float64
+    zmax::Float64
     dx::Float64
     dy::Float64
     dz::Float64
@@ -41,7 +44,7 @@ end
 
 
 function GenerateStructure(OA::ObjectArray, nx, ny, nz)
-    local count = length(OA)
+    local count = convert(Int32,length(OA))
     local xmin::Float64, xmax::Float64
     local ymin::Float64, ymax::Float64
     local zmin::Float64, zmax::Float64
@@ -51,9 +54,11 @@ function GenerateStructure(OA::ObjectArray, nx, ny, nz)
     xmin,ymin,zmin = OA[1].center - OA[1].radius
     xmax,ymax,zmax = OA[1].center + OA[1].radius
     for o in OA
-        xmin,ymin,zmin = min(o.center - o.radius, [xmin, ymin, zmin])
-        xmax,ymax,zmax = max(o.center + o.radius, [xmax, ymax, zmax])
+        xmin,ymin,zmin = min((o.center - o.radius) - 0.1, [xmin, ymin, zmin])
+        xmax,ymax,zmax = max((o.center + o.radius) + 0.1, [xmax, ymax, zmax])
     end
+
+    dx,dy,dz = ([xmax,ymax,zmax] - [xmin,ymin,zmin]) ./ [nx, ny, nz]
     
     a = Array(Array{Int32,1}, nx, ny, nz)
     for i in 1:nx
@@ -66,8 +71,8 @@ function GenerateStructure(OA::ObjectArray, nx, ny, nz)
 
     for s in 1:count
         o = OA[s]
-        xmn,ymn,zmn = floor(Int32, o.center - o.radius - xmin)
-        xmx,ymx,zmx = ceil(Int32, o.center + o.radius - xmin)
+        xmn,ymn,zmn = floor(Int32, (o.center - o.radius - [xmin, ymin, zmin]) ./ [dx, dy, dz]) + 1
+        xmx,ymx,zmx = floor(Int32, (o.center + o.radius - [xmin, ymin, zmin]) ./ [dx, dy, dz]) + 1
 
         for i in xmn:xmx
             for j in ymn:ymx

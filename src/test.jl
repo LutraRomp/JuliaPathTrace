@@ -1,5 +1,5 @@
 #!/usr/bin/env julia
-# --track-allocation=user
+
 push!(LOAD_PATH, "./")
 
 using DataFrames
@@ -9,7 +9,7 @@ using FileIO
 using JuliaShader
 using Geometries
 using ArrayEnv
-using ArrayAccel
+using GridAccel
 using RayTrace
 using MatrixTools
 
@@ -17,7 +17,7 @@ function GenObjects(numb)
     oa = ObjectArray(numb)
     for i in 1:length(oa)
         oa[i] = Sphere()
-        oa[i].center  = 9.0*(rand(3)-0.5)
+        oa[i].center  = 10.0*randn(3)
         oa[i].radius  = 1.0
         oa[i].radius2 = oa[i].radius
         oa[i].material.diffuse = ShaderRGBA(1.0, 1.0, 1.0)
@@ -56,14 +56,14 @@ function GenObjects(numb)
 end
 
 function GenAccelStructure(oa)
-    aa = GenerateStructure(oa)
+    aa = GenerateStructure(oa, 50, 50, 50)
 end
 
 function render(camera::Camera, aa, samples)
     fsamples = convert(Float64, samples)
-    img = SharedArray(Float32, 3, camera.res_x, camera.res_y)
-    for i in 1:camera.res_x
-        println("Row: $(i)")
+    img = SharedArray(Float32, 3, camera.res_y, camera.res_x)
+    @sync @parallel for i in 1:camera.res_x
+        println("Column: $(i)")
         for j in 1:camera.res_y
             r = 0.0
             g = 0.0
@@ -100,16 +100,17 @@ function go()
     camera.origin = [0.0, 0.0, -40.0]
     camera.rotation = [0.0, 0.0, 0.0]
 
-    oa = GenObjects(30)
+    oa = GenObjects(10)
     aa = GenAccelStructure(oa)
 
-    img=render(camera, aa, 1)
+    img=render(camera, oa, 1)
 
-    Profile.clear_malloc_data()
-    camera = Camera(200, 200)
+    oa = GenObjects(40)
+    aa = GenAccelStructure(oa)
+    camera = Camera(100, 50)
     camera.origin = [0.0, 0.0, -40.0]
     camera.rotation = [0.0, 0.0, 0.0]
-    @time img=render(camera, aa, 4)
+    @time img=render(camera, oa, 12)
     save("out.png", colorview(RGB, img))
 end
 

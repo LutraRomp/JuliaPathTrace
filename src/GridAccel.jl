@@ -1,6 +1,6 @@
 module GridAccel
 
-export GridAccel, GenerateStructure
+export GridAccel, GridAccel_Iter, GenerateStructure
 
 using ArrayEnv
 # a=Array(Array{Int32,1}, 2, 2)
@@ -22,15 +22,26 @@ type AccelGrid{T}
     dx::Float64
     dy::Float64
     dz::Float64
+
+    nx::Int64
+    ny::Int64
+    nz::Int64
 end
 
-Base.start(::AccelGrid) = 1
-Base.next(AA::AccelGrid, state) = (AA.oa[AA.a[state]], state+1)
-Base.done(AA::AccelGrid, state) = state > AA.count
-Base.eltype(::Type{AccelGrid}) = AccelGrid.a
-Base.length(AA::AccelGrid) = AA.count
-Base.size(AA::AccelGrid) = (AA.count,)
-Base.endof(AA::AccelGrid) = AA.count
+type AccelGrid_Iter{T}
+    acc_grd::AccelGrid
+    origin_ray::Array{T,3}
+    cur_position::Array{Int32,3}
+end
+
+Base.start(::AccelGrid_Iter) = 1
+Base.next(AA::AccelGrid_Iter, state) = (AA.oa[AA.a[state]], state+1)
+Base.done(AA::AccelGrid_Iter, state) = state > AA.count
+
+Base.eltype(::Type{AccelGrid_Iter}) = AccelGrid_Iter.acc_grd
+Base.length(AA::AccelGrid_Iter) = AA.count
+Base.size(AA::AccelGrid_Iter) = (AA.count,)
+Base.endof(AA::AccelGrid_Iter) = AA.count
 
 function Base.getindex(AA::AccelGrid, i::Integer)
     1 <= i <= AA.count || throw(BoundsError(AA,i))
@@ -44,7 +55,7 @@ end
 
 
 function GenerateStructure(OA::ObjectArray, nx, ny, nz)
-    local count = convert(Int32,length(OA))
+    local count = convert(Int64,length(OA))
     local xmin::Float64, xmax::Float64
     local ymin::Float64, ymax::Float64
     local zmin::Float64, zmax::Float64
@@ -60,7 +71,7 @@ function GenerateStructure(OA::ObjectArray, nx, ny, nz)
 
     dx,dy,dz = ([xmax,ymax,zmax] - [xmin,ymin,zmin]) ./ [nx, ny, nz]
     
-    a = Array(Array{Int32,1}, nx, ny, nz)
+    a = Array(Array{Int64,1}, nx, ny, nz)
     for i in 1:nx
         for j in 1:ny
             for k in 1:nz
@@ -83,7 +94,7 @@ function GenerateStructure(OA::ObjectArray, nx, ny, nz)
         end
         
     end
-    AccelGrid(count, a, OA, xmin, xmax, ymin, ymax, zmin, zmax, dx, dy, dz)
+    AccelGrid(count, a, OA, xmin, xmax, ymin, ymax, zmin, zmax, dx, dy, dz, nx, ny, nz)
 end
 
 end

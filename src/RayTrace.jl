@@ -1,6 +1,6 @@
 module RayTrace
 
-export Camera, get_ray, trace_path
+export Camera, render
 
 using MatrixTools, JuliaShader, Geometries
 
@@ -153,5 +153,42 @@ function trace_path(world_objects, ray_orig, ray_dir, depth)
 
     return mix(emission_mix, mix(glossy_mix, diffuse_color, glossy_color), emission_color)
 end
+
+function render(camera::Camera, aa, samples)
+    fsamples = convert(Float64, samples)
+    img = SharedArray(Float32, 3, camera.res_y, camera.res_x)
+    @sync @parallel for i in 1:camera.res_x
+        println("Column: $(i)")
+        for j in 1:camera.res_y
+            r = 0.0
+            g = 0.0
+            b = 0.0
+            a = 0.0
+            for itter = 1:samples
+                ray_dir = get_ray(camera, i, j)
+                x = trace_path(aa, camera.origin, ray_dir, 2)
+                r += x.r
+                g += x.g
+                b += x.b
+                a += x.a
+            end
+            img[1,j,i]=r/fsamples
+            img[2,j,i]=g/fsamples
+            img[3,j,i]=b/fsamples
+
+            if img[1,j,i] > 1.0
+                img[1,j,i] = 1.0
+            end
+            if img[2,j,i] > 1.0
+                img[2,j,i] = 1.0
+            end
+            if img[3,j,i] > 1.0
+                img[3,j,i] = 1.0
+            end
+        end
+    end
+    return img
+end
+
 
 end

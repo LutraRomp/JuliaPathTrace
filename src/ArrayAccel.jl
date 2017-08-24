@@ -31,7 +31,7 @@ end
 
 function GenerateStructure(OA::ObjectArray)::AccelArray
     n = length(OA)
-    a = Array(typeof(n), n)
+    a = Array{typeof(n)}(n)
     for i in 1:n
         a[i] = i
     end

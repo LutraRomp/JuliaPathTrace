@@ -9,7 +9,8 @@ using FileIO
 using JuliaShader
 using Geometries
 using ArrayEnv
-#using GridAccel
+#using ArrayAccel
+using GridAccel
 using RayTrace
 using MatrixTools
 
@@ -18,7 +19,7 @@ function GenObjects(numb)
     for i in 1:length(oa)
         oa[i] = Sphere()
         oa[i].center  = 5.0*randn(3)
-        oa[i].radius  = 1.0
+        oa[i].radius  = 0.05
         oa[i].radius2 = oa[i].radius
         oa[i].material.diffuse = ShaderRGBA(1.0, 1.0, 1.0)
         oa[i].material.glossy = ShaderRGBA(1.0, 1.0, 1.0)
@@ -55,28 +56,39 @@ function GenObjects(numb)
     return oa
 end
 
-function GenAccelStructure(oa)
-    aa = GenerateStructure(oa, 50, 50, 50)
+function GenAccelStructure(oa, n)
+    aa = GenerateStructure(oa, Int64(n), Int64(n), Int64(n))
+#    aa = GenerateStructure(oa)
+    return aa
 end
 
 function go()
+    # Warm up section
+    srand(1)
     camera = Camera(10, 10)
     camera.origin = [0.0, 0.0, -40.0]
     camera.rotation = [0.0, 0.0, 0.0]
 
-    oa = GenObjects(10)
-    #aa = GenAccelStructure(oa)
+    oa = GenObjects(convert(Int64,10))
+    aa = GenAccelStructure(oa, 10)
 
-    img=render(camera, oa, 1)
+    img=render(camera, aa, 4)
 
-    oa = GenObjects(40)
-    #aa = GenAccelStructure(oa)
-    camera = Camera(200, 100)
+
+    # Actual pat tracer
+    srand(1)
+    oa = GenObjects(convert(Int64,1000000))
+    camera = Camera(800, 600)
     camera.origin = [0.0, 0.0, -40.0]
     camera.rotation = [0.0, 0.0, 0.0]
-    @time img=render(camera, oa, 12)
+    #Profile.init(delay=0.01)
+    #Profile.clear()
+    #@profile @time img=render(camera, oa, 4)
+    n=30
+    println(n)
+    aa = GenAccelStructure(oa, n)
+    @time img=render(camera, aa, 40)
     save("out.png", colorview(RGB, img))
 end
-
 
 go()

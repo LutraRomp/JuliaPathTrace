@@ -47,10 +47,10 @@ calc_refl(ray_dir, normal) = normalize( ray_dir - 2 * normal * dot(ray_dir,norma
 
 function calc_diff(ray_dir, normal)
     Theta = 2*pi*rand()
-    z = rand()
-    sz2 = sqrt(1-z*z)
-    x = sz2*cos(Theta)
-    y = sz2*sin(Theta)
+    z     = rand()
+    sz2   = sqrt(1-z*z)
+    x     = sz2*cos(Theta)
+    y     = sz2*sin(Theta)
 
     w = normalize(cross([0.0, 0.0, 1.0], normal))
 

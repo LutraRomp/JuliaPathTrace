@@ -104,7 +104,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     local glossy_mix::Float64
     local emission_mix::Float64
 
-    local world_objects = accel_struct.oa  # world_objects is the object array
+    world_objects = accel_struct.oa  # world_objects is the object array
 
     if depth == 0
         return ShaderRGBA(0.0, 0.0, 0.0)
@@ -155,7 +155,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
             hit,dist = obj_intersect(world_objects[a[i]], ray_orig, ray_dir)
             if hit
                 if dist < closest_dist
-                    selected_item=i
+                    selected_item=a[i]
                     closest_dist=dist
                 end
             end

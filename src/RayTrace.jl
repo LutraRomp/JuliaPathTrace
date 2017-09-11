@@ -78,6 +78,21 @@ function get_ray(camera::Camera, i, j, jitter=false)
 end
 
 
+#bool intersection(box b, ray r) {
+#    double tx1 = (b.min.x - r.x0.x)*r.n_inv.x;
+#    double tx2 = (b.max.x - r.x0.x)*r.n_inv.x;
+# 
+#    double tmin = min(tx1, tx2);
+#    double tmax = max(tx1, tx2);
+# 
+#    double ty1 = (b.min.y - r.x0.y)*r.n_inv.y;
+#    double ty2 = (b.max.y - r.x0.y)*r.n_inv.y;
+# 
+#    tmin = max(tmin, min(ty1, ty2));
+#    tmax = min(tmax, max(ty1, ty2));
+# 
+#    return tmax >= tmin;
+#}
 function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     local new_glossy_ray_dir::Array{Float64,1}
     local new_diffuse_ray_dir::Array{Float64,1}
@@ -97,6 +112,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
 
     selected_item = 0
     closest_dist = 1e100
+    search_box = false
 
     if (ray_orig[1] >= accel_struct.xmin) && (ray_orig[1] <= accel_struct.xmax) &&
        (ray_orig[2] >= accel_struct.ymin) && (ray_orig[2] <= accel_struct.ymax) &&
@@ -105,54 +121,68 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         grid_i = convert(Int64, ceil( (ray_orig[1] - accel_struct.xmin)/accel_struct.dx ))
         grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
         grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
-
-        while true
-            a = accel_struct.a[grid_i, grid_j, grid_k]
-            for i in 1:length(a)
-                hit,dist = obj_intersect(world_objects[a[i]], ray_orig, ray_dir)
-                if hit
-                    if dist < closest_dist
-                        selected_item=i
-                        closest_dist=dist
-                    end
-                end
-            end
-            selected_item > 0 && break
-
-            x1 = accel_struct.dx*(grid_i-1) + accel_struct.xmin
-            x2 = accel_struct.dx*grid_i + accel_struct.xmin
-            y1 = accel_struct.dy*(grid_j-1) + accel_struct.ymin
-            y2 = accel_struct.dy*grid_j + accel_struct.ymin
-            z1 = accel_struct.dz*(grid_k-1) + accel_struct.zmin
-            z2 = accel_struct.dz*grid_k + accel_struct.zmin
-
-            bx_ex = box_exit(x1, x2, y1, y2, z1, z2, ray_orig, ray_dir)
-            if bx_ex == 1   grid_i = grid_i + 1  end
-            if bx_ex == 2   grid_j = grid_j + 1  end
-            if bx_ex == 3   grid_k = grid_k + 1  end
-            if bx_ex == -1  grid_i = grid_i - 1  end
-            if bx_ex == -2  grid_j = grid_j - 1  end
-            if bx_ex == -3  grid_k = grid_k - 1  end
-
-            grid_i < 1               && break
-            grid_i > accel_struct.nx && break
-            grid_j < 1               && break
-            grid_j > accel_struct.ny && break
-            grid_k < 1               && break
-            grid_k > accel_struct.nz && break
-         end
+        search_box = true
     else
-        if selected_item == 0
-            for i in 1:length(world_objects)
-                hit,dist = obj_intersect(world_objects[i], ray_orig, ray_dir)
-                if hit
-                     if dist < closest_dist
-                        selected_item=i
-                        closest_dist=dist
-                    end
+        t1 = (accel_struct.xmin - ray_orig[1])/ray_dir[1]
+        t2 = (accel_struct.xmax - ray_orig[1])/ray_dir[1]
+        tmin = min(t1, t2)
+        tmax = max(t1, t2)
+
+        t1 = (accel_struct.ymin - ray_orig[2])/ray_dir[2]
+        t2 = (accel_struct.ymax - ray_orig[2])/ray_dir[2]
+        tmin = max(tmin, min(t1, t2))
+        tmax = min(tmax, max(t1, t2))
+
+        t1 = (accel_struct.zmin - ray_orig[3])/ray_dir[3]
+        t2 = (accel_struct.zmax - ray_orig[3])/ray_dir[3]
+        tmin = max(tmin, min(t1, t2))
+        tmax = min(tmax, max(t1, t2))
+
+        if tmax >= tmin    # we have an intersection, but where?
+            ray_orig = ray_orig + ray_dir*(tmin*1.0001)
+            grid_i = convert(Int64, ceil( (ray_orig[1] - accel_struct.xmin)/accel_struct.dx ))
+            grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
+            grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
+            search_box = true
+        end
+    end
+
+    while search_box
+        a = accel_struct.a[grid_i, grid_j, grid_k]
+        for i in 1:length(a)
+            local hit::Bool
+            local dist::Float64
+            hit,dist = obj_intersect(world_objects[a[i]], ray_orig, ray_dir)
+            if hit
+                if dist < closest_dist
+                    selected_item=i
+                    closest_dist=dist
                 end
             end
         end
+        selected_item > 0 && break
+
+        x1 = accel_struct.dx*(grid_i-1) + accel_struct.xmin
+        x2 = accel_struct.dx*grid_i + accel_struct.xmin
+        y1 = accel_struct.dy*(grid_j-1) + accel_struct.ymin
+        y2 = accel_struct.dy*grid_j + accel_struct.ymin
+        z1 = accel_struct.dz*(grid_k-1) + accel_struct.zmin
+        z2 = accel_struct.dz*grid_k + accel_struct.zmin
+
+        bx_ex = box_exit(x1, x2, y1, y2, z1, z2, ray_orig, ray_dir)
+        if bx_ex == 1   grid_i = grid_i + 1  end
+        if bx_ex == 2   grid_j = grid_j + 1  end
+        if bx_ex == 3   grid_k = grid_k + 1  end
+        if bx_ex == -1  grid_i = grid_i - 1  end
+        if bx_ex == -2  grid_j = grid_j - 1  end
+        if bx_ex == -3  grid_k = grid_k - 1  end
+
+        grid_i < 1               && break
+        grid_i > accel_struct.nx && break
+        grid_j < 1               && break
+        grid_j > accel_struct.ny && break
+        grid_k < 1               && break
+        grid_k > accel_struct.nz && break
     end
 
     # If no object is seen, return ambient light conditions (hard coded for now.)
@@ -297,9 +327,9 @@ end
 function render(camera::Camera, aa, samples)
     fsamples::Float64 = convert(Float64, samples)
     img = SharedArray{Float32}(3, camera.res_y, camera.res_x)
-    @sync @parallel for i in 1:camera.res_x
+    for i in 1:camera.res_x
+        println("Column: $(i)")
         for j in 1:camera.res_y
-        println("Column: $(i)  Row: $(j)")
             r::Float64 = 0.0
             g::Float64 = 0.0
             b::Float64 = 0.0

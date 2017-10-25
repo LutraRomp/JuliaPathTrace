@@ -123,23 +123,43 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
         search_box = true
     else
-        t1 = (accel_struct.xmin - ray_orig[1])/ray_dir[1]
-        t2 = (accel_struct.xmax - ray_orig[1])/ray_dir[1]
-        tmin = min(t1, t2)
-        tmax = max(t1, t2)
+        tmin = Inf
+        tmax = -Inf
 
-        t1 = (accel_struct.ymin - ray_orig[2])/ray_dir[2]
-        t2 = (accel_struct.ymax - ray_orig[2])/ray_dir[2]
-        tmin = max(tmin, min(t1, t2))
-        tmax = min(tmax, max(t1, t2))
+        if ray_dir[1] != 0.0
+            t1 = (accel_struct.xmin - ray_orig[1])/ray_dir[1]
+            t2 = (accel_struct.xmax - ray_orig[1])/ray_dir[1]
+            tmin = min(t1, t2)
+            tmax = max(t1, t2)
+        end
 
-        t1 = (accel_struct.zmin - ray_orig[3])/ray_dir[3]
-        t2 = (accel_struct.zmax - ray_orig[3])/ray_dir[3]
-        tmin = max(tmin, min(t1, t2))
-        tmax = min(tmax, max(t1, t2))
+        if ray_dir[2] != 0.0
+            t1 = (accel_struct.ymin - ray_orig[2])/ray_dir[2]
+            t2 = (accel_struct.ymax - ray_orig[2])/ray_dir[2]
+            if tmin == Inf
+                tmin = min(t1, t2)
+                tmax = max(t1, t2)
+            else
+                tmin = max(tmin, min(t1, t2))
+                tmax = min(tmax, max(t1, t2))
+            end
+        end
+
+        if ray_dir[3] != 0.0
+            t1 = (accel_struct.zmin - ray_orig[3])/ray_dir[3]
+            t2 = (accel_struct.zmax - ray_orig[3])/ray_dir[3]
+            if tmin == Inf
+                tmin = min(t1, t2)
+                tmax = max(t1, t2)
+            else
+                tmin = max(tmin, min(t1, t2))
+                tmax = min(tmax, max(t1, t2))
+            end
+        end
 
         if tmax >= tmin    # we have an intersection, but where?
-            ray_orig = ray_orig + ray_dir*(tmin*1.0001)
+            tmin = tmin*(1.0+10.0*eps())
+            ray_orig = ray_orig + tmin*ray_dir
             grid_i = convert(Int64, ceil( (ray_orig[1] - accel_struct.xmin)/accel_struct.dx ))
             grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
             grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
@@ -327,6 +347,7 @@ end
 function render(camera::Camera, aa, samples)
     fsamples::Float64 = convert(Float64, samples)
     img = SharedArray{Float32}(3, camera.res_y, camera.res_x)
+    println("Beginning")
     for i in 1:camera.res_x
         println("Column: $(i)")
         for j in 1:camera.res_y

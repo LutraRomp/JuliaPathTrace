@@ -114,6 +114,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     closest_dist = 1e100
     search_box = false
 
+    # If the ray is inside the box, figure out which cell it's in
     if (ray_orig[1] >= accel_struct.xmin) && (ray_orig[1] <= accel_struct.xmax) &&
        (ray_orig[2] >= accel_struct.ymin) && (ray_orig[2] <= accel_struct.ymax) &&
        (ray_orig[3] >= accel_struct.zmin) && (ray_orig[3] <= accel_struct.zmax)
@@ -122,7 +123,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
         grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
         search_box = true
-    else
+    else    # If the ray is outside of the box, does it hit the search area at all?
         tmin = Inf
         tmax = -Inf
 
@@ -207,25 +208,34 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
 
     # If no object is seen, return ambient light conditions (hard coded for now.)
     if selected_item == 0
-      return ShaderRGBA(1.0, 1.0, 1.0)
+        return ret_ambient(ray_orig, ray_dir, depth)
     end
+    return ret_shader(accel_struct, ray_orig, ray_dir, depth, world_objects[selected_item], closest_dist)
 
+end
+
+#function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
+function ret_ambient(ray_orig, ray_dir, depth::Int32)
+    return ShaderRGBA(1.0, 1.0, 1.0)
+end
+
+function ret_shader(accel_struct, ray_orig, ray_dir, depth::Int32, selected_object, closest_dist)
     diffuse_color = ShaderRGBA(0.0, 0.0, 0.0)
     glossy_color = ShaderRGBA(0.0, 0.0, 0.0)
     emission_color = ShaderRGBA(0.0, 0.0, 0.0)
     ret_color = ShaderRGBA(0.0, 0.0, 0.0)
 
     # Shader Work
-    point_hit, normal_of_hit = calc_intersection(world_objects[selected_item], ray_orig, ray_dir, closest_dist)
+    point_hit, normal_of_hit = calc_intersection(selected_object, ray_orig, ray_dir, closest_dist)
 
-    diffuse_set   = world_objects[selected_item].material.diffuse_set
-    glossy_set    = world_objects[selected_item].material.glossy_set
-    emission_set  = world_objects[selected_item].material.emission_set
+    diffuse_set   = selected_object.material.diffuse_set
+    glossy_set    = selected_object.material.glossy_set
+    emission_set  = selected_object.material.emission_set
 
     if diffuse_set
         new_diffuse_ray_dir = calc_diff(ray_dir, normal_of_hit)
         ret_diffuse_color = trace_path(accel_struct, point_hit, new_diffuse_ray_dir, depth-1)
-        diffuse_color = world_objects[selected_item].material.diffuse * max(0.0, dot(normal_of_hit, new_diffuse_ray_dir))
+        diffuse_color = selected_object.material.diffuse * max(0.0, dot(normal_of_hit, new_diffuse_ray_dir))
         diffuse_color = diffuse_color * ret_diffuse_color
         if !glossy_set && !emission_set
             return diffuse_color
@@ -237,7 +247,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     if glossy_set
         new_glossy_ray_dir = calc_refl(ray_dir, normal_of_hit)
         ret_glossy_color = trace_path(accel_struct, point_hit, new_glossy_ray_dir, depth-1)
-        glossy_color = world_objects[selected_item].material.glossy * ret_glossy_color
+        glossy_color = selected_object.material.glossy * ret_glossy_color
         if !diffuse_set && !emission_set
             return glossy_color
         end
@@ -246,7 +256,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     end
 
     if emission_set
-        emission_color = world_objects[selected_item].material.emission
+        emission_color = selected_object.material.emission
         if !diffuse_set && !glossy_set
             return emission_color
         end
@@ -254,95 +264,12 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         emission_mix = 0.0
     end
 
-    glossy_mix   = world_objects[selected_item].material.glossy_mix
-    emission_mix = world_objects[selected_item].material.emission_mix
+    glossy_mix   = selected_object.material.glossy_mix
+    emission_mix = selected_object.material.emission_mix
 
     return mix(emission_mix, mix(glossy_mix, diffuse_color, glossy_color), emission_color)
 end
 
-
-function trace_path2(world_objects, ray_orig, ray_dir, depth::Int32)
-    local new_glossy_ray_dir::Array{Float64,1}
-    local new_diffuse_ray_dir::Array{Float64,1}
-
-    local diffuse_color::ShaderRGBA
-    local glossy_color::ShaderRGBA
-    local emission_color::ShaderRGBA
-
-    local glossy_mix::Float64
-    local emission_mix::Float64
-
-    if depth == 0
-        return ShaderRGBA(0.0, 0.0, 0.0)
-    end
-
-    selected_item = 0
-    closest_dist = 1e100
-
-    for i in 1:length(world_objects)
-        hit,dist=obj_intersect(world_objects[i], ray_orig, ray_dir)
-        if hit
-            if dist < closest_dist
-                selected_item=i
-                closest_dist=dist
-            end
-        end
-    end
-
-    # If no object is seen, return ambient light conditions (hard coded for now.)
-    if selected_item == 0
-      return ShaderRGBA(1.0, 1.0, 1.0)
-    end
-
-    diffuse_color = ShaderRGBA(0.0, 0.0, 0.0)
-    glossy_color = ShaderRGBA(0.0, 0.0, 0.0)
-    emission_color = ShaderRGBA(0.0, 0.0, 0.0)
-    ret_color = ShaderRGBA(0.0, 0.0, 0.0)
-
-    # Shader Work
-    point_hit, normal_of_hit = calc_intersection(world_objects[selected_item], ray_orig, ray_dir, closest_dist)
-
-    diffuse_set   = world_objects[selected_item].material.diffuse_set
-    glossy_set    = world_objects[selected_item].material.glossy_set
-    emission_set  = world_objects[selected_item].material.emission_set
-
-    if diffuse_set
-        new_diffuse_ray_dir = calc_diff(ray_dir, normal_of_hit)
-        ret_diffuse_color = trace_path(world_objects, point_hit, new_diffuse_ray_dir, depth-1)
-        diffuse_color = world_objects[selected_item].material.diffuse * max(0.0, dot(normal_of_hit, new_diffuse_ray_dir))
-        diffuse_color = diffuse_color * ret_diffuse_color
-        if !glossy_set && !emission_set
-            return diffuse_color
-        end
-    else
-        glossy_mix = 1.0
-    end
-
-    if glossy_set
-        new_glossy_ray_dir = calc_refl(ray_dir, normal_of_hit)
-        ret_glossy_color = trace_path(world_objects, point_hit, new_glossy_ray_dir, depth-1)
-        glossy_color = world_objects[selected_item].material.glossy * ret_glossy_color
-        if !diffuse_set && !emission_set
-            return glossy_color
-        end
-    else
-        glossy_mix = 0.0
-    end
-
-    if emission_set
-        emission_color = world_objects[selected_item].material.emission
-        if !diffuse_set && !glossy_set
-            return emission_color
-        end
-    else
-        emission_mix = 0.0
-    end
-
-    glossy_mix   = world_objects[selected_item].material.glossy_mix
-    emission_mix = world_objects[selected_item].material.emission_mix
-
-    return mix(emission_mix, mix(glossy_mix, diffuse_color, glossy_color), emission_color)
-end
 
 function render(camera::Camera, aa, samples)
     fsamples::Float64 = convert(Float64, samples)

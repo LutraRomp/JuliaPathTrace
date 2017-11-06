@@ -78,21 +78,6 @@ function get_ray(camera::Camera, i, j, jitter=false)
 end
 
 
-#bool intersection(box b, ray r) {
-#    double tx1 = (b.min.x - r.x0.x)*r.n_inv.x;
-#    double tx2 = (b.max.x - r.x0.x)*r.n_inv.x;
-# 
-#    double tmin = min(tx1, tx2);
-#    double tmax = max(tx1, tx2);
-# 
-#    double ty1 = (b.min.y - r.x0.y)*r.n_inv.y;
-#    double ty2 = (b.max.y - r.x0.y)*r.n_inv.y;
-# 
-#    tmin = max(tmin, min(ty1, ty2));
-#    tmax = min(tmax, max(ty1, ty2));
-# 
-#    return tmax >= tmin;
-#}
 function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     local new_glossy_ray_dir::Array{Float64,1}
     local new_diffuse_ray_dir::Array{Float64,1}
@@ -159,13 +144,48 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         end
 
         if tmax >= tmin    # we have an intersection, but where?
-            tmin = tmin*(1.0+10.0*eps())
             ray_orig = ray_orig + tmin*ray_dir
             grid_i = convert(Int64, ceil( (ray_orig[1] - accel_struct.xmin)/accel_struct.dx ))
             grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
             grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
             search_box = true
+
+            grid_i = clamp(grid_i, 1, accel_struct.nx)
+            grid_j = clamp(grid_j, 1, accel_struct.ny)
+            grid_k = clamp(grid_k, 1, accel_struct.nz)
         end
+    end
+
+    deltaT_x = 0.0
+    t_x = 0.0
+    deltaT_y = 0.0
+    t_y = 0.0
+    deltaT_z = 0.0
+    t_z = 0.0
+    t = 0.0
+
+    if ray_dir[1] < 0
+        deltaT_x = -accel_struct.dx/ray_dir[1]
+        t_x = (floor(ray_orig[1] / ray_dir[1]) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
+    else
+        deltaT_x = accel_struct.dx/ray_dir[1]
+        t_x = ((floor(ray_orig[1] / ray_dir[1]) + 1) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
+    end
+
+    if ray_dir[2] < 0
+        deltaT_y = -accel_struct.dy/ray_dir[2]
+        t_y = (floor(ray_orig[2] / ray_dir[2]) * accel_struct.dy - ray_orig[2]) / ray_dir[2]
+    else
+        deltaT_y = accel_struct.dy/ray_dir[2]
+        t_y = ((floor(ray_orig[2] / ray_dir[2]) + 1) * accel_struct.dy - ray_orig[2]) / ray_dir[2]
+    end
+
+    if ray_dir[3] < 0
+        deltaT_z = -accel_struct.dz/ray_dir[3]
+        t_z = (floor(ray_orig[3] / ray_dir[3]) * accel_struct.dz - ray_orig[3]) / ray_dir[3]
+    else
+        deltaT_z = accel_struct.dz/ray_dir[3]
+        t_z = ((floor(ray_orig[3] / ray_dir[3]) + 1) * accel_struct.dz - ray_orig[3]) / ray_dir[3]
     end
 
     while search_box
@@ -183,20 +203,31 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         end
         selected_item > 0 && break
 
-        x1 = accel_struct.dx*(grid_i-1) + accel_struct.xmin
-        x2 = accel_struct.dx*grid_i + accel_struct.xmin
-        y1 = accel_struct.dy*(grid_j-1) + accel_struct.ymin
-        y2 = accel_struct.dy*grid_j + accel_struct.ymin
-        z1 = accel_struct.dz*(grid_k-1) + accel_struct.zmin
-        z2 = accel_struct.dz*grid_k + accel_struct.zmin
-
-        bx_ex = box_exit(x1, x2, y1, y2, z1, z2, ray_orig, ray_dir)
-        if bx_ex == 1   grid_i = grid_i + 1  end
-        if bx_ex == 2   grid_j = grid_j + 1  end
-        if bx_ex == 3   grid_k = grid_k + 1  end
-        if bx_ex == -1  grid_i = grid_i - 1  end
-        if bx_ex == -2  grid_j = grid_j - 1  end
-        if bx_ex == -3  grid_k = grid_k - 1  end
+        if (t_x < t_y) && (t_x < t_z)
+            t = t_x
+            t_x += deltaT_x
+            if ray_dir[1] < 0
+                grid_i = grid_i - 1
+            else
+                grid_i = grid_i + 1
+            end
+        elseif (t_y < t_z)
+            t = t_y
+            t_y += deltaT_y
+            if ray_dir[2] < 0
+                grid_j = grid_j - 1
+            else
+                grid_j = grid_j + 1
+            end
+        else
+            t = t_z
+            t_z += deltaT_z
+            if ray_dir[3] < 0
+                grid_k = grid_k - 1
+            else
+                grid_k = grid_k + 1
+            end
+        end
 
         grid_i < 1               && break
         grid_i > accel_struct.nx && break
@@ -211,7 +242,6 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         return ret_ambient(ray_orig, ray_dir, depth)
     end
     return ret_shader(accel_struct, ray_orig, ray_dir, depth, world_objects[selected_item], closest_dist)
-
 end
 
 #function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)

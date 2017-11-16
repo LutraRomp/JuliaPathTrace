@@ -1,6 +1,6 @@
 module RayTrace
 
-export Camera, render
+export Camera, render, render_pt
 
 using MatrixTools, JuliaShader, Geometries, GridAccel
 
@@ -144,7 +144,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         end
 
         if tmax >= tmin    # we have an intersection, but where?
-            ray_orig = ray_orig + tmin*ray_dir
+            ray_orig = ray_orig + tmin*ray_dir*1.000001
             grid_i = convert(Int64, ceil( (ray_orig[1] - accel_struct.xmin)/accel_struct.dx ))
             grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
             grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
@@ -157,35 +157,37 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     end
 
     deltaT_x = 0.0
-    t_x = 0.0
+    t_x = Inf
     deltaT_y = 0.0
-    t_y = 0.0
+    t_y = Inf
     deltaT_z = 0.0
-    t_z = 0.0
+    t_z = Inf
     t = 0.0
+
+    ray_orig_grid = ray_orig - [accel_struct.xmin, accel_struct.ymin, accel_struct.zmin]
 
     if ray_dir[1] < 0
         deltaT_x = -accel_struct.dx/ray_dir[1]
-        t_x = (floor(ray_orig[1] / ray_dir[1]) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
-    else
+        t_x = (floor(ray_orig_grid[1] / accel_struct.dx) * accel_struct.dx - ray_orig_grid[1]) / ray_dir[1]
+    elseif ray_dir[1] > 0
         deltaT_x = accel_struct.dx/ray_dir[1]
-        t_x = ((floor(ray_orig[1] / ray_dir[1]) + 1) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
+        t_x = ((floor(ray_orig_grid[1] / accel_struct.dx) + 1) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
     end
 
     if ray_dir[2] < 0
         deltaT_y = -accel_struct.dy/ray_dir[2]
-        t_y = (floor(ray_orig[2] / ray_dir[2]) * accel_struct.dy - ray_orig[2]) / ray_dir[2]
-    else
+        t_y = (floor(ray_orig_grid[2] / accel_struct.dy) * accel_struct.dy - ray_orig_grid[2]) / ray_dir[2]
+    elseif ray_dir[2] > 0
         deltaT_y = accel_struct.dy/ray_dir[2]
-        t_y = ((floor(ray_orig[2] / ray_dir[2]) + 1) * accel_struct.dy - ray_orig[2]) / ray_dir[2]
+        t_y = ((floor(ray_orig_grid[2] / accel_struct.dy) + 1) * accel_struct.dy - ray_orig_grid[2]) / ray_dir[2]
     end
 
     if ray_dir[3] < 0
         deltaT_z = -accel_struct.dz/ray_dir[3]
-        t_z = (floor(ray_orig[3] / ray_dir[3]) * accel_struct.dz - ray_orig[3]) / ray_dir[3]
-    else
+        t_z = (floor(ray_orig_grid[3] / accel_struct.dz) * accel_struct.dz - ray_orig_grid[3]) / ray_dir[3]
+    elseif ray_dir[3] > 0
         deltaT_z = accel_struct.dz/ray_dir[3]
-        t_z = ((floor(ray_orig[3] / ray_dir[3]) + 1) * accel_struct.dz - ray_orig[3]) / ray_dir[3]
+        t_z = ((floor(ray_orig_grid[3] / accel_struct.dz) + 1) * accel_struct.dz - ray_orig_grid[3]) / ray_dir[3]
     end
 
     while search_box
@@ -244,7 +246,6 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     return ret_shader(accel_struct, ray_orig, ray_dir, depth, world_objects[selected_item], closest_dist)
 end
 
-#function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
 function ret_ambient(ray_orig, ray_dir, depth::Int32)
     return ShaderRGBA(1.0, 1.0, 1.0)
 end
@@ -334,6 +335,41 @@ function render(camera::Camera, aa, samples)
                 img[3,j,i] = 1.0
             end
         end
+    end
+    return img
+end
+
+
+function render_pt(camera::Camera, aa, samples, i, j)
+    fsamples::Float64 = convert(Float64, samples)
+    img = SharedArray{Float32}(3, camera.res_y, camera.res_x)
+    println("Beginning")
+    println("Column: $(i)")
+    println("Row: $(j)")
+    r::Float64 = 0.0
+    g::Float64 = 0.0
+    b::Float64 = 0.0
+    a::Float64 = 0.0
+    for itter = 1:samples
+        ray_dir = get_ray(camera, i, j)
+        x = trace_path(aa, camera.origin, ray_dir, 2)
+        r += x.r
+        g += x.g
+        b += x.b
+        a += x.a
+    end
+    img[1,j,i]=r/fsamples
+    img[2,j,i]=g/fsamples
+    img[3,j,i]=b/fsamples
+
+    if img[1,j,i] > 1.0
+        img[1,j,i] = 1.0
+    end
+    if img[2,j,i] > 1.0
+        img[2,j,i] = 1.0
+    end
+    if img[3,j,i] > 1.0
+        img[3,j,i] = 1.0
     end
     return img
 end

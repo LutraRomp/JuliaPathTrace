@@ -144,7 +144,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         end
 
         if tmax >= tmin    # we have an intersection, but where?
-            ray_orig = ray_orig + tmin*ray_dir*1.000001
+            ray_orig = ray_orig + tmin*ray_dir
             grid_i = convert(Int64, ceil( (ray_orig[1] - accel_struct.xmin)/accel_struct.dx ))
             grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
             grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
@@ -171,7 +171,7 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         t_x = (floor(ray_orig_grid[1] / accel_struct.dx) * accel_struct.dx - ray_orig_grid[1]) / ray_dir[1]
     elseif ray_dir[1] > 0
         deltaT_x = accel_struct.dx/ray_dir[1]
-        t_x = ((floor(ray_orig_grid[1] / accel_struct.dx) + 1) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
+        t_x = ((floor(ray_orig_grid[1] / accel_struct.dx) + 1) * accel_struct.dx - ray_orig_grid[1]) / ray_dir[1]
     end
 
     if ray_dir[2] < 0

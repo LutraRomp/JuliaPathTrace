@@ -1,6 +1,6 @@
 module RayTrace
 
-export Camera, render, render_pt
+export Camera, render
 
 using MatrixTools, JuliaShader, Geometries, GridAccel
 
@@ -304,18 +304,19 @@ end
 
 function render(camera::Camera, aa, samples)
     fsamples::Float64 = convert(Float64, samples)
-    img = SharedArray{Float32}(3, camera.res_y, camera.res_x)
+    #img = SharedArray{Float32}(3, camera.res_y, camera.res_x)
+    img = Array{Float32}(3, camera.res_y, camera.res_x)
     println("Beginning")
     for i in 1:camera.res_x
-        println("Column: $(i)")
-        for j in 1:camera.res_y
+        println("Column $i")
+        Threads.@threads for j in 1:camera.res_y
             r::Float64 = 0.0
             g::Float64 = 0.0
             b::Float64 = 0.0
             a::Float64 = 0.0
             for itter = 1:samples
-                ray_dir = get_ray(camera, i, j)
-                x = trace_path(aa, camera.origin, ray_dir, 2)
+                ray_dir = get_ray(camera, i, j, true)
+                x = trace_path(aa, camera.origin, ray_dir, 25)
                 r += x.r
                 g += x.g
                 b += x.b
@@ -335,41 +336,6 @@ function render(camera::Camera, aa, samples)
                 img[3,j,i] = 1.0
             end
         end
-    end
-    return img
-end
-
-
-function render_pt(camera::Camera, aa, samples, i, j)
-    fsamples::Float64 = convert(Float64, samples)
-    img = SharedArray{Float32}(3, camera.res_y, camera.res_x)
-    println("Beginning")
-    println("Column: $(i)")
-    println("Row: $(j)")
-    r::Float64 = 0.0
-    g::Float64 = 0.0
-    b::Float64 = 0.0
-    a::Float64 = 0.0
-    for itter = 1:samples
-        ray_dir = get_ray(camera, i, j)
-        x = trace_path(aa, camera.origin, ray_dir, 2)
-        r += x.r
-        g += x.g
-        b += x.b
-        a += x.a
-    end
-    img[1,j,i]=r/fsamples
-    img[2,j,i]=g/fsamples
-    img[3,j,i]=b/fsamples
-
-    if img[1,j,i] > 1.0
-        img[1,j,i] = 1.0
-    end
-    if img[2,j,i] > 1.0
-        img[2,j,i] = 1.0
-    end
-    if img[3,j,i] > 1.0
-        img[3,j,i] = 1.0
     end
     return img
 end

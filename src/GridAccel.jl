@@ -162,8 +162,13 @@ function GenerateStructure(OA::ObjectArray, nx, ny, nz)
     xmin,ymin,zmin = OA[1].center - OA[1].radius
     xmax,ymax,zmax = OA[1].center + OA[1].radius
     for o in OA
-        xmin,ymin,zmin = min.((o.center - o.radius) - 0.1, [xmin, ymin, zmin])
-        xmax,ymax,zmax = max.((o.center + o.radius) + 0.1, [xmax, ymax, zmax])
+        xmin = min((o.center[1] - o.radius) - 0.1, xmin)
+        ymin = min((o.center[2] - o.radius) - 0.1, ymin)
+        zmin = min((o.center[3] - o.radius) - 0.1, zmin)
+        xmax = max((o.center[1] + o.radius) + 0.1, xmax)
+        ymax = max((o.center[2] + o.radius) + 0.1, ymax)
+        zmax = max((o.center[3] + o.radius) + 0.1, zmax)
+
     end
 
     dx,dy,dz = ([xmax,ymax,zmax] - [xmin,ymin,zmin]) ./ [nx, ny, nz]

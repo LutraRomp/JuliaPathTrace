@@ -1,6 +1,6 @@
 module RayTrace
 
-export Camera, render
+export Camera, render, PrecalcRotation
 
 using MatrixTools, JuliaShader, Geometries, GridAccel
 
@@ -8,6 +8,7 @@ using MatrixTools, JuliaShader, Geometries, GridAccel
 type Camera{T,U}
     origin::Array{T}
     rotation::Array{T}
+    t_m::Array{T,2}
 
     focal_length::T
     fov::T
@@ -34,12 +35,13 @@ end
 function Camera{T<:Integer}(res_x::T, res_y::T)
     origin = zeros(3)
     rotation = zeros(3)
+    t_m = eye(4)
 
     focal_length = 10.0
     fov = deg2rad(30.0)
     ppu = CalcPPU(res_x, res_y, focal_length, fov)
 
-    Camera(origin, rotation, focal_length, fov, ppu, res_x, res_y)
+    Camera(origin, rotation, t_m, focal_length, fov, ppu, res_x, res_y)
 end
 
 function CalcPPU{T<:Integer, U<:AbstractFloat}(res_x::T, res_y::T, focal_length::U, fov::U)
@@ -52,6 +54,18 @@ function CalcPPU{T<:Integer, U<:AbstractFloat}(res_x::T, res_y::T, focal_length:
     return opposite_size / opposite_half
 end
 
+function PrecalcRotation(camera::Camera)
+    #t_m = [1.0  0.0  0.0  0.0;
+    #       0.0  1.0  0.0  0.0;
+    #       0.0  0.0  1.0  0.0;
+    #       0.0  0.0  0.0  1.0]
+    camera.t_m = eye(4)
+
+    camera.t_m *= rotate_x(camera.rotation[1])
+    camera.t_m *= rotate_y(camera.rotation[2])
+    camera.t_m *= rotate_z(camera.rotation[3])
+end
+
 
 function get_ray(camera::Camera, i, j, jitter=false)
     p_x::Float64 = convert(Float64, i - camera.res_x/2) * camera.ppu
@@ -62,33 +76,11 @@ function get_ray(camera::Camera, i, j, jitter=false)
         p_y += 0.2*randn()*camera.ppu
     end
 
-    # Would be a bit clearer to include this code, but
-    # I'm avoiding a matrix multiply below
-    #t_m = [1.0  0.0  0.0  0.0;
-    #       0.0  1.0  0.0  0.0;
-    #       0.0  0.0  1.0  0.0;
-    #       0.0  0.0  0.0  1.0]
-
-    t_m = rotate_x(camera.rotation[1])
-    t_m *= rotate_y(camera.rotation[2])
-    t_m *= rotate_z(camera.rotation[3])
-
-    ray_dir = t_m * [p_x, p_y, camera.focal_length, 1.0]
+    ray_dir = camera.t_m * [p_x, p_y, camera.focal_length, 1.0]
     return normalize(ray_dir[1:3])
 end
 
-
 function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
-    local new_glossy_ray_dir::Array{Float64,1}
-    local new_diffuse_ray_dir::Array{Float64,1}
-
-    local diffuse_color::ShaderRGBA
-    local glossy_color::ShaderRGBA
-    local emission_color::ShaderRGBA
-
-    local glossy_mix::Float64
-    local emission_mix::Float64
-
     world_objects = accel_struct.oa  # world_objects is the object array
 
     if depth == 0
@@ -144,7 +136,9 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
         end
 
         if tmax >= tmin    # we have an intersection, but where?
-            ray_orig = ray_orig + tmin*ray_dir
+            ray_orig[1] += tmin*ray_dir[1]
+            ray_orig[2] += tmin*ray_dir[2]
+            ray_orig[3] += tmin*ray_dir[3]
             grid_i = convert(Int64, ceil( (ray_orig[1] - accel_struct.xmin)/accel_struct.dx ))
             grid_j = convert(Int64, ceil( (ray_orig[2] - accel_struct.ymin)/accel_struct.dy ))
             grid_k = convert(Int64, ceil( (ray_orig[3] - accel_struct.zmin)/accel_struct.dz ))
@@ -164,30 +158,32 @@ function trace_path(accel_struct, ray_orig, ray_dir, depth::Int32)
     t_z = Inf
     t = 0.0
 
-    ray_orig_grid = ray_orig - [accel_struct.xmin, accel_struct.ymin, accel_struct.zmin]
+    ray_orig[1] -= accel_struct.xmin
+    ray_orig[2] -= accel_struct.ymin
+    ray_orig[3] -= accel_struct.zmin
 
     if ray_dir[1] < 0
         deltaT_x = -accel_struct.dx/ray_dir[1]
-        t_x = (floor(ray_orig_grid[1] / accel_struct.dx) * accel_struct.dx - ray_orig_grid[1]) / ray_dir[1]
+        t_x = (floor(ray_orig[1] / accel_struct.dx) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
     elseif ray_dir[1] > 0
         deltaT_x = accel_struct.dx/ray_dir[1]
-        t_x = ((floor(ray_orig_grid[1] / accel_struct.dx) + 1) * accel_struct.dx - ray_orig_grid[1]) / ray_dir[1]
+        t_x = ((floor(ray_orig[1] / accel_struct.dx) + 1) * accel_struct.dx - ray_orig[1]) / ray_dir[1]
     end
 
     if ray_dir[2] < 0
         deltaT_y = -accel_struct.dy/ray_dir[2]
-        t_y = (floor(ray_orig_grid[2] / accel_struct.dy) * accel_struct.dy - ray_orig_grid[2]) / ray_dir[2]
+        t_y = (floor(ray_orig[2] / accel_struct.dy) * accel_struct.dy - ray_orig[2]) / ray_dir[2]
     elseif ray_dir[2] > 0
         deltaT_y = accel_struct.dy/ray_dir[2]
-        t_y = ((floor(ray_orig_grid[2] / accel_struct.dy) + 1) * accel_struct.dy - ray_orig_grid[2]) / ray_dir[2]
+        t_y = ((floor(ray_orig[2] / accel_struct.dy) + 1) * accel_struct.dy - ray_orig[2]) / ray_dir[2]
     end
 
     if ray_dir[3] < 0
         deltaT_z = -accel_struct.dz/ray_dir[3]
-        t_z = (floor(ray_orig_grid[3] / accel_struct.dz) * accel_struct.dz - ray_orig_grid[3]) / ray_dir[3]
+        t_z = (floor(ray_orig[3] / accel_struct.dz) * accel_struct.dz - ray_orig[3]) / ray_dir[3]
     elseif ray_dir[3] > 0
         deltaT_z = accel_struct.dz/ray_dir[3]
-        t_z = ((floor(ray_orig_grid[3] / accel_struct.dz) + 1) * accel_struct.dz - ray_orig_grid[3]) / ray_dir[3]
+        t_z = ((floor(ray_orig[3] / accel_struct.dz) + 1) * accel_struct.dz - ray_orig[3]) / ray_dir[3]
     end
 
     while search_box
@@ -317,10 +313,10 @@ function render(camera::Camera, aa, samples)
             for itter = 1:samples
                 ray_dir = get_ray(camera, i, j, true)
                 x = trace_path(aa, camera.origin, ray_dir, 25)
-                r += x.r
-                g += x.g
-                b += x.b
-                a += x.a
+                r = r + x.r
+                g = g + x.g
+                b = b + x.b
+                a = a + x.a
             end
             img[1,j,i]=r/fsamples
             img[2,j,i]=g/fsamples
